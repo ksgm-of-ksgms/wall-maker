@@ -1,0 +1,37 @@
+name:                wall-maker
+version:             0.1.0.0
+github:              "ksgm-of-ksgms/wall-maker"
+license:             BSD3
+author:              "ksgm"
+maintainer:          "ksgm"
+copyright:           "2020 ksgm"
+
+extra-source-files:
+- README.md
+
+description:         Please see the README on GitHub at <https://github.com/ksgm-of-ksgms/wall-maker#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- lens
+- containers
+- gloss
+- random
+- linear
+- xml
+- bytestring
+- mtl
+
+executables:
+  wall-maker-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+
+default-extensions:
+- TypeOperators
+- TypeApplications
+
