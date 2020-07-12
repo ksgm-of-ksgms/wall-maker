@@ -313,9 +313,10 @@ handleInputWallMode (EventKey (MouseButton LeftButton) Up _ pt) s = return $ s &
     let WallMode start = s ^.  mode
     let end = align' (s ^. screen) pt
     mode .= BuildMode
-    prevModels %= (s ^. model:)
-    nextModels .= []
-    model . walls %= (Wall start end wallThickness :)
+    when (distance start end > 0) $ do
+            prevModels %= (s ^. model:)
+            nextModels .= []
+            model . walls %= (Wall start end wallThickness :)
 handleInputWallMode (EventKey (SpecialKey KeyEsc) Down _ pt) s = return $ s &  mode .~ BuildMode
 handleInputWallMode ev s = handleInputCommon ev s
 
