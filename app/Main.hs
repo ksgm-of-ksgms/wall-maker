@@ -9,10 +9,12 @@ import Control.Monad.State (State, execState, get)
 import Control.Monad.Reader (MonadReader, Reader, runReader, ask)
 import Control.Monad (when)
 import System.Exit (die)
+import System.Environment (getArgs)
 import Data.Char (ord)
 import Data.List (delete)
 import Data.Maybe (maybeToList)
 import GHC.Generics
+import Data.Aeson (FromJSON, ToJSON, encodeFile, decodeFileStrict)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Game
 import Graphics.Gloss.Interface.Environment (getScreenSize)
@@ -67,7 +69,14 @@ scaleDown x = clamp minmmpxl maxmmpxl $ x / 2
 
 type WPoint = V2 Float -- [mm] NOTE: WPoint represents points in world coordinates
 
-data Wall = Wall WPoint WPoint Float deriving (Show, Eq) -- start end thickness
+instance FromJSON a => FromJSON (V2 a)
+instance ToJSON a => ToJSON (V2 a)
+
+
+data Wall = Wall WPoint WPoint Float deriving (Show, Eq, Generic) -- start end thickness
+
+instance FromJSON Wall
+instance ToJSON Wall
 
 
 data Mode
@@ -95,9 +104,12 @@ defaultScreen = Screen (wpt 0 0) 128 defaultSSize (wpt 0 0)
 
 data Model = Model
     { _walls :: [Wall]
-    } deriving Show
+    } deriving (Show, Eq, Generic)
 
 makeLenses ''Model
+
+instance FromJSON Model
+instance ToJSON Model
 
 defaultModel :: Model
 defaultModel = Model []
@@ -113,9 +125,8 @@ data App = App
 
 makeLenses ''App
 
-defaultS :: App
-defaultS = App defaultModel defaultScreen (ViewMode []) [] []
-
+defaultS :: Model -> App
+defaultS model = App model defaultScreen (ViewMode []) [] []
 
 ---------------------
 -- Draw Utility
@@ -226,6 +237,10 @@ drawGrid = do
 drawWall :: (MonadReader Screen m) => Color -> Wall -> m Picture
 drawWall c (Wall p0 p1 t) = color c <$> drawThickLineW p0 p1 t
 
+drawOrigin :: (MonadReader Screen m) => m Picture
+drawOrigin =  do
+    (x, y) <- w2s $ wpt 0 0
+    return $ translate x y $ color (greyN 0.8) $ thickCircle 2 4
 
 draw :: App -> IO Picture
 draw s = do
@@ -243,6 +258,7 @@ draw s = do
             , drawText (0.01, 0.09) $ "grid-thick : " ++ show (f2i $ 10 * gs / 1000) ++ " [m]"
             , drawText (0.01, 0.12) $ "mm/pxl : " ++ show (v ^. mmpxl)
             , drawText (0.01, 0.15) $ "x, y : " ++ show (v ^. focus / 1000) ++ " [m]"
+            , drawOrigin
             ] ++ [drawWall black w | w <- s ^. model . walls] ++ tmpWall ++ selectedWalls
     return $ Pictures pics
 
@@ -275,6 +291,7 @@ handleInputViewMode :: Event -> App -> IO App
 handleInputViewMode (EventKey (Char 'w') Down _ pt) s = return $ s &  mode .~ BuildMode
 handleInputViewMode (EventKey (Char 's') Down _ pt) s = do
     writeFile "model.sdf" $ dump "room2" $ s ^. model
+    encodeFile "model.json" $ s^. model
     return s
 handleInputViewMode (EventKey (SpecialKey KeyEsc) Down _ _) s = return $ s &  mode .~ ViewMode []
 handleInputViewMode (EventKey (Char '\b') Down _ _) s = return $ s &~ do
@@ -424,13 +441,19 @@ dump name model = printf xml name $ concat [dumpWall idx w | (idx, w) <- zip [0.
 ---------------------
 
 main :: IO ()
-main = playIO
-        FullScreen
-        --(InWindow "wallmaker" defaultSSize (0, 0))
-        white
-        60
-        defaultS
-        draw
-        handleInput
-        (\_ s -> return s )
+main = do
+        args <- getArgs
+        maybemodel <- if length args > 0 then decodeFileStrict (args !! 0) else return Nothing
+        let model = case maybemodel of
+                        Just x -> x
+                        Nothing -> defaultModel
+        playIO
+            FullScreen
+            --(InWindow "wallmaker" defaultSSize (0, 0))
+            white
+            60
+            (defaultS model)
+            draw
+            handleInput
+            (\_ s -> return s )
 
