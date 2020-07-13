@@ -21,6 +21,7 @@ dependencies:
 - aeson
 - bytestring
 - mtl
+- hip
 
 executables:
   wall-maker-exe:

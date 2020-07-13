@@ -15,9 +15,11 @@ import Data.List (delete)
 import Data.Maybe (maybeToList)
 import GHC.Generics
 import Data.Aeson (FromJSON, ToJSON, encodeFile, decodeFileStrict)
+import qualified Data.ByteString.Lazy as B
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Game
 import Graphics.Gloss.Interface.Environment (getScreenSize)
+import Graphics.Image hiding (normalize, translate, scale)
 import Linear
 import GHC.Float.RealFracMethods (float2Int)
 import Text.Printf (printf)
@@ -281,6 +283,11 @@ handleInputCommon :: Event -> App -> IO App
 handleInputCommon (EventKey (Char '\DC1') Down (Modifiers Up Down Up) _) s = die "exit" -- ctrl-q
 handleInputCommon (EventKey (Char '\NAK') Down (Modifiers Up Down Up) _) s = return $ undo s
 handleInputCommon (EventKey (Char '\DC2') Down (Modifiers Up Down Up) _) s = return $ redo s
+handleInputCommon (EventKey (Char '\DC3') Down (Modifiers Up Down Up) _) s = do
+    writeFile "model.sdf" $ toXML "room2" $ s ^. model
+    encodeFile "model.json" $ s^. model
+    dumpPng "obsmap.png" $ s ^. model
+    return s
 handleInputCommon (EventKey (MouseButton WheelDown) Up _ _) s = return $ s & screen . mmpxl %~ scaleUp
 handleInputCommon (EventKey (MouseButton WheelUp) Up _ _) s = return $ s & screen . mmpxl %~ scaleDown
 handleInputCommon (EventMotion pt) s = return $ s & screen . focus .~ align' (s ^. screen) pt
@@ -289,10 +296,6 @@ handleInputCommon ev s = return s
 
 handleInputViewMode :: Event -> App -> IO App
 handleInputViewMode (EventKey (Char 'w') Down _ pt) s = return $ s &  mode .~ BuildMode
-handleInputViewMode (EventKey (Char 's') Down _ pt) s = do
-    writeFile "model.sdf" $ dump "room2" $ s ^. model
-    encodeFile "model.json" $ s^. model
-    return s
 handleInputViewMode (EventKey (SpecialKey KeyEsc) Down _ _) s = return $ s &  mode .~ ViewMode []
 handleInputViewMode (EventKey (Char '\b') Down _ _) s = return $ s &~ do
     let w = s ^?! mode . _ViewMode . _head
@@ -367,8 +370,8 @@ isWallSelected (Wall p0 p1 t) p delta = proj_between_p0_and_p1 && l_p_proj <= t 
     l_p0_p1 = distance p0 p1
     l_p0_proj = distance p0 proj
     l_p_proj = distance p proj
-    proj_between_p0_and_p1 = dot (proj - p0) (p1 - p0) >= 0
-
+    d = dot (proj - p0) (p1 - p0)
+    proj_between_p0_and_p1 = 0 <= d && d <= l_p0_p1 ** 2
 
 findSelectedWall :: [Wall] -> WPoint -> Float -> Maybe Wall
 findSelectedWall ws p delta = case [w | w <- ws, isWallSelected w p delta] of
@@ -422,18 +425,30 @@ wallxml = "     <link name='Wall_%d'>                                           
           \     </link>                                                                \n"
 
 
-dumpWall :: Int -> Wall -> String
-dumpWall idx (Wall start end thickness) =
-        printf wallxml idx idx bx by bz bx by bz cx cy angle
-        where
-        (cx, cy) = wpt2tup $ (start + end) / 2 / 1000
-        (dx, dy) = wpt2tup $ end - start
-        angle = atan2 dy dx
-        (bx, by, bz) = (distance start end / 1000, thickness/1000, wallHeight/1000 :: Float)
 
 
-dump :: String -> Model -> String
-dump name model = printf xml name $ concat [dumpWall idx w | (idx, w) <- zip [0..] (model ^. walls)]
+toXML :: String -> Model -> String
+toXML name model = printf xml name $ concat [dumpWall idx w | (idx, w) <- zip [0..] (model ^. walls)]
+    where
+    dumpWall :: Int -> Wall -> String
+    dumpWall idx (Wall start end thickness) =
+            printf wallxml idx idx bx by bz bx by bz cx cy angle
+            where
+            (cx, cy) = wpt2tup $ (start + end) / 2 / 1000
+            (dx, dy) = wpt2tup $ end - start
+            angle = atan2 dy dx
+            (bx, by, bz) = (distance start end / 1000, thickness/1000, wallHeight/1000 :: Float)
+
+
+dumpPng :: String -> Model -> IO ()
+dumpPng filepath model = B.writeFile filepath $ encode PNG [] obsMap
+    where
+    obsMap = makeImageR VS (w, h) f :: Image VS Y Word8
+    idx2wpt r c = wpt ((fromIntegral c  - w / 2) * mmpxl') ((h / 2 - fromIntegral r) * mmpxl')
+    f (r, c) = PixelY $ g $ idx2wpt r c
+    g wpt = if is _Just $ findSelectedWall (model ^. walls) wpt 0 then 255 else 0
+    mmpxl' = 50
+    (w,h) = (1000, 1000)
 
 
 ---------------------
