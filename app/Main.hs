@@ -403,7 +403,7 @@ wallxml = "     <link name='Wall_%d'>                                           
           \         </geometry>                                                        \n\
           \         <pose frame=''>0 0 0 0 0 0</pose>                                  \n\
           \       </collision>                                                         \n\
-          \       <visual name='Wall_0_Visual'>                                        \n\
+          \       <visual name='Wall_%d_Visual'>                                        \n\
           \         <pose frame=''>0 0 0 0 0 0</pose>                                  \n\
           \         <geometry>                                                         \n\
           \           <box>                                                            \n\
@@ -432,7 +432,7 @@ toXML name model = printf xml name $ concat [dumpWall idx w | (idx, w) <- zip [0
     where
     dumpWall :: Int -> Wall -> String
     dumpWall idx (Wall start end thickness) =
-            printf wallxml idx idx bx by bz bx by bz cx cy angle
+            printf wallxml idx idx bx by bz idx bx by bz cx cy angle
             where
             (cx, cy) = wpt2tup $ (start + end) / 2 / 1000
             (dx, dy) = wpt2tup $ end - start
